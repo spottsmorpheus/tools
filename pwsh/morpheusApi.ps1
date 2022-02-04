@@ -61,7 +61,7 @@ function get-token {
     return $token.access_token
 }
 
-
+# Investigating using Invoke-webrequest
 function Invoke-MorpheusApi2 {
     param (
         [string]$Method="GET",
@@ -115,8 +115,8 @@ function Invoke-MorpheusApi {
         [string]$Token=$script:Token,
         [string]$Endpoint,
         [int]$Chunk=25,
-        [string]$PropertyName="",
-        [PSCustomObject]$Body=$null
+        [PSCustomObject]$Body=$null,
+        [switch]$SkipCert
 
     )
 
@@ -124,33 +124,58 @@ function Invoke-MorpheusApi {
     write-Host "Method $Method : Paging in chunks $Chunk"
     $Headers = @{Authorization = "Bearer $($Token)"}
     if ($Body) {
-        $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Bbody -Headers $headers -SkipCertificateCheck
+        if ($SkipCert) {
+            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Body -Headers -ErrorAction:SilentlyContinue $headers -SkipCertificateCheck
+        } else {
+            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Body -Headers $headers -ErrorAction:SilentlyContinue 
+        }
+        if (-Not $Response) {
+            Write-Warning "No Response Payload for endpoint $($Endpoint)"
+            $Data = $Null
+        } else {
+            $Data = $Response
+        }     
     } else {
         # Is this a GET request - if so prepare to page
         $Slice = 0
         $More = $true
         $Data = $Null
+        $Total = $Null
         do {
-            Write-Host "Requesting Data $Slice :  $Chunk"
-            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -SkipCertificateCheck
-            if ($Response.meta) {
-                #Response is capable of being paged and contains a meta property
-                if ($Null -eq $Data) {
-                    # Return the data as PSCustomObject containing the required property
-                    $Data = [PSCustomObject]@{$PropertyName=$Response.$PropertyName}
-                } else {
-                    $Data.$PropertyName += $Response.$PropertyName
-                }
-                $More = (($Response.meta.offset + $Response.meta.size) -lt $Response.meta.total)
-                $slice = $Response.meta.offset + $Response.meta.size
+            Write-Host "Requesting Data: Slice $Slice - $($Slice+$Chunk) $(if ($Total) {"of $Total"})"
+            if ($SkipCert) {
+                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -ErrorAction:SilentlyContinue -SkipCertificateCheck
             } else {
-                $More = $false
-                $Data = $Response
+                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -ErrorAction:SilentlyContinue 
+            }
+            if (-Not $Response) {
+                Write-Warning "No Response Payload for endpoint $($Endpoint)"
+                $More = $False
+            } else {
+                if ($Response.meta) {
+                    # Pagable response
+                    $Total = [Int32]$Response.meta.total
+                    $Size = [Int32]$Response.meta.size
+                    $Offset = [Int32]$Response.meta.offset
+                    #Response is capable of being paged and contains a meta property. Extract Payload
+                    $PayloadProperty = $Response.PSObject.Properties | Where-Object {$_.name -notmatch "meta"} | Select-Object -First 1
+                    $PropertyName = $PayloadProperty.name
+                    if ($Null -eq $Data) {
+                        # Return the data as PSCustomObject containing the required property
+                        $Data = [PSCustomObject]@{$PropertyName=$Response.$PropertyName}
+                    } else {
+                        $Data.$PropertyName += $Response.$PropertyName
+                    }
+                    $More = (($Offset + $Size) -lt $Total)
+                    $Slice = $Offset + $Size
+                } else {
+                    # Non-Pagable. Return whole response
+                    $More = $false
+                    $Data = $Response
+                }
             }
         } While ($More)
-    }
-
-     
+    }    
     return $Data
 }
 
