@@ -11,7 +11,7 @@ fi
 if [ -z $capturepath ]; then
     declare capturepath="~/capture"
     echo "Captures save in $capturepath"
-fi 
+fi
 
 mkdir -p $capturepath
 
@@ -30,5 +30,3 @@ while read -r folder action file; do
    declare now="$(date +"%F_%H:%M:%S")"
    echo "$now:$note -- Capturing:  $folder -- $action -- $file" | tee -a $capturelog
 done
-
-
