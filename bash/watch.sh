@@ -9,9 +9,9 @@ if [ -z $watchpath ]; then
     exit 1
 fi
 if [ -z $capturepath ]; then
-    declare capturepath="~/capture"
+    declare capturepath="$PWD/capture"
     echo "Captures save in $capturepath"
-fi 
+fi
 
 mkdir -p $capturepath
 
@@ -24,11 +24,9 @@ echo "Watching $watchpath"
 echo "Log saved to $capturelog"
 
 # Watch for files created, written and closed - capture file on close
-inotifywait -q -m -e close_write -r "$watchpath" 2>&1 |
+sudo inotifywait -q -m -e close_write -r "$watchpath" 2>&1 |
 while read -r folder action file; do
-   cp -v -u "$folder$file"  "$capturepath/$file"
+   sudo cp --no-preserve=all -v -u "$folder$file"  "$capturepath/$file"
    declare now="$(date +"%F_%H:%M:%S")"
    echo "$now:$note -- Capturing:  $folder -- $action -- $file" | tee -a $capturelog
 done
-
-
