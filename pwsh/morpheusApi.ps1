@@ -2,6 +2,8 @@
 $Appliance =  ""
 $Token = ""
 
+# to get a date in iso format use .ToString("s") on the date object
+
 <#
 $certCallback = @"
     using System;
@@ -62,51 +64,6 @@ function get-token {
 }
 
 # Investigating using Invoke-webrequest
-function Invoke-MorpheusApi2 {
-    param (
-        [string]$Method="GET",
-        [string]$Appliance=$script:Appliance,
-        [string]$Token=$script:Token,
-        [string]$Endpoint,
-        [int]$Chunk=25,
-        [string]$PropertyName="",
-        [PSCustomObject]$Body=$null
-
-    )
-
-    Write-Host "Using Appliance $($Appliance) with Token $Token"
-    write-Host "Method $Method : Paging in chunks $Chunk"
-    $Headers = @{Authorization = "Bearer $($Token)"}
-    if ($Body) {
-        $R=Invoke-Webrequest -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Bbody -Headers $headers -SkipCertificateCheck
-    } else {
-        # Is this a GET request - if so prepare to page
-        $Slice = 0
-        $More = $true
-        $Data = $Null
-        do {
-            Write-Host "Requesting Data $Slice :  $Chunk"
-            $R=Invoke-WebRequest -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -SkipCertificateCheck
-            Write-Host "Status $($R.StatusCode) - content length $($R.RawContentLength)"
-            $Response = $R.Content | Convertfrom-json -depth 10
-            if ($Response.meta) {
-                #Response is capable of being paged and contains a meta property
-                if ($Null -eq $Data) {
-                    # Return the data as PSCustomObject containing the required property
-                    $Data = [PSCustomObject]@{$PropertyName=$Response.$PropertyName}
-                } else {
-                    $Data.$PropertyName += $Response.$PropertyName
-                }
-                $More = (($Response.meta.offset + $Response.meta.size) -lt $Response.meta.total)
-                $slice = $Response.meta.offset + $Response.meta.size
-            } else {
-                $More = $false
-                $Data = $Response
-            }
-        } While ($More)
-    }  
-    return $Data
-}
 
 function Invoke-MorpheusApi {
     param (
@@ -121,7 +78,8 @@ function Invoke-MorpheusApi {
     )
 
     Write-Host "Using Appliance $($Appliance) with Token $Token"
-    write-Host "Method $Method : Paging in chunks $Chunk"
+    Write-Host "Method $Method : Paging in chunks $Chunk"
+
     $Headers = @{Authorization = "Bearer $($Token)"}
     if ($Body) {
         if ($SkipCert) {
@@ -141,15 +99,23 @@ function Invoke-MorpheusApi {
         $More = $true
         $Data = $Null
         $Total = $Null
+
         do {
-            Write-Host "Requesting Data: Slice $Slice - $($Slice+$Chunk) $(if ($Total) {"of $Total"})"
-            if ($SkipCert) {
-                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -ErrorAction:SilentlyContinue -SkipCertificateCheck
+            if ($Endpoint -match "\?") {
+                $Url = "$($Appliance)/$($Endpoint)&offset=$($Slice)&max=$($Chunk)"
             } else {
-                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)" -Headers $headers -ErrorAction:SilentlyContinue 
+                $Url = "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)"
+            }
+            Write-Host "Requesting $($Url)"
+            Write-Host "Slice $Slice - $($Slice+$Chunk) $(if ($Total) {"of $Total"})"
+
+            if ($SkipCert) {
+                $Response=Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -ErrorAction:SilentlyContinue -SkipCertificateCheck
+            } else {
+                $Response=Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -ErrorAction:SilentlyContinue 
             }
             if (-Not $Response) {
-                Write-Warning "No Response Payload for endpoint $($Endpoint)"
+                Write-Warning "No Response Payload for endpoint $($Url)"
                 $More = $False
             } else {
                 if ($Response.meta) {

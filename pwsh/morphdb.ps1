@@ -26,15 +26,33 @@ function Get-TableInfo {
     return $q
 }
 
+Function Get-ProvisionHistory {
+    param (
+        [int32]$ServerId=0
+    )
+
+    $Q = "select display_name,ref_type,process_type_name,timer_category,timer_sub_category,status, start_date, end_date,instance_id,container_id,server_id from process_event"
+    if ($ServerId -eq 0) {
+        $History=invoke-SQLQuery -Query ($Q + " where ref_type='container'") 
+    } else {
+        $History=invoke-SQLQuery -Query ($Q + " where server_id=$($ServerId)")
+    }
+    $History
+}
+
+
 
 Import-Module -Name SimplySQL -ErrorAction SilentlyContinue
 if (-NOT $?) {
     Write-Host "Script requires the SimplySQL module from Powershell Gallery"
     Write-Host ""
-    Write-Host "Use Import-Module -Name SimplySql to install"
+    Write-Host "Use Install-Module -Name SimplySql to install"
     exit 1
 }
+
+# Read the secrets file on and All-In-1 Appliance
 $secretsFile=Invoke-Expression "sudo cat /etc/morpheus/morpheus-secrets.json" 
+
 if ($secretsFile) {
     $secrets = $secretsFile | ConvertFrom-Json
     # Define clear text string for username and password
