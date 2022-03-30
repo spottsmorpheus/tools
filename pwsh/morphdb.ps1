@@ -1,13 +1,4 @@
-
-$TableInfoQuery = @"
-select
-    table_name,column_name,referenced_table_name,referenced_column_name
-from
-    information_schema.key_column_usage
-where
-    table_schema = 'morpheus' 
-    and table_name = '%%Table%%'
-"@
+# Script wide constants/here srtrings
 
 $Constraints = @"
 select 
@@ -22,8 +13,8 @@ function Get-TableInfo {
         [string]$Table
     )
 
-    $q = $Constraints -f $Table
-    return $q
+    $Query = $Script:Constraints -f $Table
+    return $Query
 }
 
 Function Get-ProvisionHistory {
@@ -39,7 +30,6 @@ Function Get-ProvisionHistory {
     }
     $History
 }
-
 
 
 Import-Module -Name SimplySQL -ErrorAction SilentlyContinue

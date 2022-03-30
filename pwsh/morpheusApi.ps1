@@ -50,7 +50,7 @@ function get-token {
         [PSCredential]$credential=$null
     )
 
-    #Credentials can be for Subtenants an if so they are in the form Domain\User where Domain is the Tenant Number 
+    #Credentials can be for Subtenants and if so they are in the form Domain\User where Domain is the Tenant Number 
     if (-Not $credential) {
         $credential = get-credential -message "Enter Morpheus UI Credentials"
     }
@@ -70,7 +70,7 @@ function Invoke-MorpheusApi {
         [string]$Method="GET",
         [string]$Appliance=$script:Appliance,
         [string]$Token=$script:Token,
-        [string]$Endpoint,
+        [string]$Endpoint="api/whoami",
         [int]$Chunk=25,
         [PSCustomObject]$Body=$null,
         [switch]$SkipCert
@@ -80,12 +80,14 @@ function Invoke-MorpheusApi {
     Write-Host "Using Appliance $($Appliance) with Token $Token"
     Write-Host "Method $Method : Paging in chunks $Chunk"
 
+    if ($Endpoint[0] -ne "/") {$Endpoint = "/" + $Endpoint}
+
     $Headers = @{Authorization = "Bearer $($Token)"}
     if ($Body) {
         if ($SkipCert) {
-            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Body -Headers -ErrorAction:SilentlyContinue $headers -SkipCertificateCheck
+            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Body -Headers -ErrorAction:SilentlyContinue $headers -SkipCertificateCheck
         } else {
-            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)/$($Endpoint)" -Body $Body -Headers $headers -ErrorAction:SilentlyContinue 
+            $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Body -Headers $headers -ErrorAction:SilentlyContinue 
         }
         if (-Not $Response) {
             Write-Warning "No Response Payload for endpoint $($Endpoint)"
@@ -94,7 +96,7 @@ function Invoke-MorpheusApi {
             $Data = $Response
         }     
     } else {
-        # Is this a GET request - if so prepare to page
+        # Is this a GET request - if so prepare to page if necessary
         $Slice = 0
         $More = $true
         $Data = $Null
@@ -102,9 +104,9 @@ function Invoke-MorpheusApi {
 
         do {
             if ($Endpoint -match "\?") {
-                $Url = "$($Appliance)/$($Endpoint)&offset=$($Slice)&max=$($Chunk)"
+                $Url = "$($Appliance)$($Endpoint)&offset=$($Slice)&max=$($Chunk)"
             } else {
-                $Url = "$($Appliance)/$($Endpoint)?offset=$($Slice)&max=$($Chunk)"
+                $Url = "$($Appliance)$($Endpoint)?offset=$($Slice)&max=$($Chunk)"
             }
             Write-Host "Requesting $($Url)"
             Write-Host "Slice $Slice - $($Slice+$Chunk) $(if ($Total) {"of $Total"})"
@@ -145,6 +147,45 @@ function Invoke-MorpheusApi {
     return $Data
 }
 
+
+function Get-ProvisionEvents {
+    param (
+        [int32]$InstanceId=0,
+        [int32]$ServerId=0
+    )
+
+    if ($InstanceId -ne 0) {
+        $proc=Invoke-MorpheusApi -Endpoint "/api/processes?instanceId=$($InstanceId)" -SkipCert
+    } elseif ($ServerId -ne 0) {
+        $proc=Invoke-MorpheusApi -Endpoint "/api/processes?serverId=$($ServerId)" -SkipCert
+    } else {
+        $proc=Invoke-MorpheusApi -Endpoint "/api/processes?refType=container" -SkipCert
+    }
+    $proc
+}
+
+function Get-MorpheusLogs {
+    param (
+        [DateTime]$Start=[DateTime]::Now.AddHours(-1),
+        [DateTime]$End=[DateTime]::now
+    )
+
+    Write-Host "Start $($Start.ToString("s"))  - End $($End.ToString("s"))"
+    $log = Invoke-MorpheusApi -Endpoint "/api/health/logs?startDate=$($Start.ToString("s"))&endDate=$($End.ToString("s"))" -SkipCert
+    $log
+}
+
+function get-ProvisionEventLogs {
+    param (
+        [int32]$InstanceId=0,
+        [int32]$ServerId=0
+    ) 
+
+    $proc =  Get-ProvisionEvents -InstanceId $InstanceId -ServerId $ServerId
+    $provisionEvents = $proc.processes.events | 
+        Foreach-Object {[PSCustomObject]@{Event=$_;Logs=(Get-MorpheusLogs -Start $_.startDate -End $_.endDate).logs}}
+    $provisionEvents
+}
 
 function Set-Appliance {
     param (
