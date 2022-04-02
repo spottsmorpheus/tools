@@ -44,7 +44,7 @@ if (-not ([System.Management.Automation.PSTypeName]'ServerCertificateValidationC
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
 
 
-function get-token {
+function Get-ApiToken {
     param (
         [string]$appliance=$script:Appliance,
         [PSCredential]$credential=$null
@@ -151,7 +151,8 @@ function Invoke-MorpheusApi {
 function Get-ProvisionEvents {
     param (
         [int32]$InstanceId=0,
-        [int32]$ServerId=0
+        [int32]$ServerId=0,
+        [string]$ProcessType="provision"
     )
 
     if ($InstanceId -ne 0) {
@@ -161,7 +162,8 @@ function Get-ProvisionEvents {
     } else {
         $proc=Invoke-MorpheusApi -Endpoint "/api/processes?refType=container" -SkipCert
     }
-    $proc
+    # Filter By ProcessType
+    return $proc.processes| Where-Object {$_.processType.code -eq $ProcessType}
 }
 
 function Get-MorpheusLogs {
@@ -178,13 +180,18 @@ function Get-MorpheusLogs {
 function get-ProvisionEventLogs {
     param (
         [int32]$InstanceId=0,
-        [int32]$ServerId=0
+        [int32]$ServerId=0,
+        [switch]$AsJson
     ) 
 
     $proc =  Get-ProvisionEvents -InstanceId $InstanceId -ServerId $ServerId
-    $provisionEvents = $proc.processes.events | 
+    $provisionEvents = $proc.events | 
         Foreach-Object {[PSCustomObject]@{Event=$_;Logs=(Get-MorpheusLogs -Start $_.startDate -End $_.endDate).logs}}
-    $provisionEvents
+    if ($AsJson) {
+        return $provisionEvents | ConvertTo-Json -Depth 5
+    } else {
+        $provisionEvents |
+    }
 }
 
 function Set-Appliance {
