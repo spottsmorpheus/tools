@@ -190,7 +190,7 @@ function get-ProvisionEventLogs {
     if ($AsJson) {
         return $provisionEvents | ConvertTo-Json -Depth 5
     } else {
-        $provisionEvents |
+        return $provisionEvents
     }
 }
 
