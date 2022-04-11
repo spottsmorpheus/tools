@@ -1,4 +1,5 @@
 import static groovy.json.JsonOutput.*
+import com.morpheus.Container
 
 try {
     if (customOptions) {
@@ -23,6 +24,16 @@ try {
     println("instance Exception ${ex.message}")
 }
 
+try {
+    if (container) {
+        println("==== instance ==============")
+        println(prettyPrint(toJson(container)))
+    } else {
+        println("No container variable defined")
+    }
+} catch(ex) {
+    println("container Exception ${ex.message}")
+}
 
 try {
     if (server) {
@@ -45,3 +56,15 @@ try {
 } catch(ex) {
     println("zone Exception ${ex.message}")
 }
+
+try {
+    if (app) {
+        println("==== app ===================")
+        println(prettyPrint(toJson(app)))
+    } else {
+        println("No app variable defined")
+    }
+} catch(ex) {
+    println("app Exception ${ex.message}")
+}
+
