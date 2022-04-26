@@ -11,8 +11,7 @@ try {
 } catch(ex) {
     println("customOptions Exception ${ex.message}")
 }
-
-
+$s
 try {
     if (instance) {
         println("==== instance ==============")
@@ -26,7 +25,7 @@ try {
 
 try {
     if (container) {
-        println("==== instance ==============")
+        println("==== container =============")
         println(prettyPrint(toJson(container)))
     } else {
         println("No container variable defined")
