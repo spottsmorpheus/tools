@@ -39,7 +39,7 @@ Write-Host "Powershell Host Version: $($Host.Version.ToString())"
 Write-Host "Morpheus API Powershell Functions" -ForegroundColor Green
 Write-Host "Use Set-MorpheusAppliance to set Appliance URL" -ForegroundColor Green
 Write-Host "Use Set-MorpheusToken so set the bearer token" -ForegroundColor Green
-Write-Warning "Use of -SkipCertificateCheck on Invoke-RestMethod is $(if($SkipCertSupported){'Supported'}else{'Not Supported'})"
+Write-Warning "Use of -SkipCertificateCheck on Invoke-WebRequest is $(if($SkipCertSupported){'Supported'}else{'Not Supported'})"
 
 Write-Host "Use Set-MorpheusSkipCert to Skip Certificate Checking for Self-Signed certs" -ForegroundColor Green
 
@@ -177,13 +177,25 @@ function Get-MorpheusApiToken {
     $body.username=$credential.username
     $body.password=$credential.getnetworkcredential().password
     $uri = "$($appliance)/oauth/token?grant_type=password&scope=write&client_id=morph-api"
-    write-host $uri
-    if ($script:SkipCertSupported) {
-        $token = Invoke-RestMethod -SkipCertificateCheck:$script:SkipCert -Method POST -uri $uri -body $body
-    } else {
-        $token = Invoke-RestMethod -Method POST -uri $uri -body $body
+    write-host "Invoking Api $($uri)" -ForegroundColor Green
+    try {
+        if ($script:SkipCertSupported) {
+            $Response = Invoke-WebRequest -SkipCertificateCheck:$script:SkipCert -Method POST -Uri $uri -Body $body -ContentType "application/x-www-form-urlencoded"
+        } else {
+            $Response = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType "application/x-www-form-urlencoded"
+        }
+        if ($Response.StatusCode -eq 200) {
+            $Payload = $Response.content | Convertfrom-Json
+            return $Payload.access_token
+        } else {
+            Write-Warning "Response StatusCode $($Response.StatusCode)"
+            return $null
+        }
     }
-    return $token.access_token
+    catch {
+        Write-Error "Error calling Api ($_)"
+        return $null
+    }
 }
 
 function Invoke-MorpheusApi {
@@ -224,34 +236,39 @@ function Invoke-MorpheusApi {
     #>      
     [CmdletBinding()]
     param (
-        [string]$Method="GET",
+        [string]$Endpoint="api/whoami",
+        [string]$Method="Get",
         [string]$Appliance=$script:Appliance,
         [string]$Token=$script:Token,
-        [string]$Endpoint="api/whoami",
         [int]$PageSize=25,
-        [PSCustomObject]$Body=$null,
-        [switch]$SkipCert=$script:SkipCert
-
+        [PSCustomObject]$Body=$null
     )
 
-    Write-Host "Using Appliance $($Appliance) with Token $Token"
-    Write-Host "Method $Method : Paging in chunks of $PageSize"
-
+    Write-Host "Using Appliance $($Appliance) :SkipCert $($Script:SkipCert)" -ForegroundColor Green
     if ($Endpoint[0] -ne "/") {$Endpoint = "/" + $Endpoint}
 
-    $Headers = @{Authorization = "Bearer $($Token)"}
+    $Headers = @{"Authorization" = "Bearer $($Token)"; "Content-Type" = "application/json"}
 
-    if ($Body -Or $Method -ne "GET" ) {
+    if ($Body -Or $Method -ne "Get" ) {
+        Write-Host "Method $Method : Endpoint $EndPoint" -ForegroundColor Green
         try {
+            # Body Object detected - convert to json payload for the Api (5 levels max)
+            $Payload = $Body | Convertto-json -depth 5
             if ($script:SkipCertSupported) {
-                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Body -Headers $Headers -SkipCertificateCheck:$script:SkipCert -ErrorAction SilentlyContinue
+                $Response=Invoke-WebRequest -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Payload -Headers $Headers -SkipCertificateCheck:$script:SkipCert -ErrorAction SilentlyContinue
             } else {
-                $Response=Invoke-RestMethod -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Body -Headers $Headers -ErrorAction SilentlyContinue 
+                $Response=Invoke-WebRequest -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Payload -Headers $Headers -ErrorAction SilentlyContinue 
             }
-            $Data = $Response
+            if ($Response.StatusCode -eq 200) {
+                Write-Host "Success:" -ForegroundColor Green
+                $Payload = $Response.Content | Convertfrom-Json
+                return $Payload
+            } else {
+                Write-Warning "API returned status code $($Response.StatusCode)"
+            }
         } catch {
-            Write-Warning "No Response Payload for endpoint $($Endpoint)"
-            $Data = $Null
+            Write-Error "Error calling Api ($_)"
+            return $null
         }    
     } else {
         # Is this for a GET request with no Body - if so prepare to page if necessary
@@ -259,6 +276,8 @@ function Invoke-MorpheusApi {
         $More = $true
         $Data = $null
         $Total = $null
+
+        Write-Host "Method $Method : Paging in chunks of $PageSize" -ForegroundColor Green
 
         do {
             if ($Endpoint -match "\?") {
@@ -271,33 +290,41 @@ function Invoke-MorpheusApi {
 
             try {
                 if ($script:SkipCertSupported) {
-                    $Response=Invoke-RestMethod -Method $Method -Uri $Url -Headers $Headers -ErrorAction SilentlyContinue -SkipCertificateCheck:$script:SkipCert
+                    $Response=Invoke-WebRequest -Method $Method -Uri $Url -Headers $Headers -ErrorAction SilentlyContinue -SkipCertificateCheck:$script:SkipCert
                 } else {
-                    $Response=Invoke-RestMethod -Method $Method -Uri $Url -Headers $Headers -ErrorAction SilentlyContinue 
+                    $Response=Invoke-WebRequest -Method $Method -Uri $Url -Headers $Headers -ErrorAction SilentlyContinue 
+                }
+                if ($Response.StatusCode -eq 200) {
+                    # OK Response - Convert payload from json
+                    $Payload = $Response.Content | Convertfrom-Json
+                    if ($Payload.meta) {
+                        # Pagable response
+                        $Total = [Int32]$Payload.meta.total
+                        $Size = [Int32]$Payload.meta.size
+                        $Offset = [Int32]$Payload.meta.offset
+                        #Response is capable of being paged and contains a meta property. Extract Payload
+                        $PayloadProperty = $Payload.PSObject.Properties | Where-Object {$_.name -notmatch "meta"} | Select-Object -First 1
+                        $PropertyName = $PayloadProperty.name
+                        if ($Null -eq $Data) {
+                            # Return the data as PSCustomObject containing the required property
+                            $Data = [PSCustomObject]@{$PropertyName=$Payload.$PropertyName}
+                        } else {
+                            $Data.$PropertyName += $Payload.$PropertyName
+                        }
+                        $More = (($Offset + $Size) -lt $Total)
+                        $Page = $Offset + $Size
+                    } else {
+                        # Non-Pagable. Return whole response
+                        Write-Host "Returning complete Payload" -ForegroundColor Green
+                        $More = $false
+                        $Data = $Payload
+                    }
+                    
+                } else {
+                    Write-Warning "API returned status code $($Response.StatusCode)"
                 }
                 # Should have a response
-                if ($Response.meta) {
-                    # Pagable response
-                    $Total = [Int32]$Response.meta.total
-                    $Size = [Int32]$Response.meta.size
-                    $Offset = [Int32]$Response.meta.offset
-                    #Response is capable of being paged and contains a meta property. Extract Payload
-                    $PayloadProperty = $Response.PSObject.Properties | Where-Object {$_.name -notmatch "meta"} | Select-Object -First 1
-                    $PropertyName = $PayloadProperty.name
-                    if ($Null -eq $Data) {
-                        # Return the data as PSCustomObject containing the required property
-                        $Data = [PSCustomObject]@{$PropertyName=$Response.$PropertyName}
-                    } else {
-                        $Data.$PropertyName += $Response.$PropertyName
-                    }
-                    $More = (($Offset + $Size) -lt $Total)
-                    $Page = $Offset + $Size
-                } else {
-                    # Non-Pagable. Return whole response
-                    Write-Host "Returning complete Payload" -ForegroundColor Green
-                    $More = $false
-                    $Data = $Response
-                }
+
             } catch {
                 Write-Warning "No Response Payload for endpoint $($Url)"
                 $More = $False
