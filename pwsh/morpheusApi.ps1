@@ -126,7 +126,7 @@ function Set-MorpheusSkipCert {
     Sets the Morpheus API Calls to ignore Certificate checking
 
     Examples:
-    Set-MorpheusKipCert -Token <MorpheusApiToken>
+    Set-MorpheusSkipCert
 
     .OUTPUTS
     None (sets Script level Variable $SkipCert)
