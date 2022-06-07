@@ -78,9 +78,10 @@ Function Out-HtmlPage {
         [Parameter(Mandatory = $true,ValueFromPipeline = $true)]
         [Object[]]$InputObject,
         [String]$Title,
+        [String]$Filename="/tmp/myfile.html",
         [String]$Style=$Script:HtmlStyle,
         [Hashtable]$ClassMap=$Script:ClassMap,
-        [Object]$Footer="MorpheusData.com"
+        [Object]$Footer="morpheusdata.com"
     )
 
     Begin {
@@ -111,8 +112,8 @@ Function Out-HtmlPage {
         [void]$html.AppendLine('</body>')
         [void]$html.AppendLine('</html>')
         #Generate the HTML Report
-        $html.ToString() | Set-Content -Path "/tmp/myfile.html"
-        invoke-item "/tmp/myfile.html"
+        $html.ToString() | Set-Content -Path $Filename
+        invoke-item $Filename
     }
 }
 
