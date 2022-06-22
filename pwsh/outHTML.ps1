@@ -11,22 +11,25 @@ body {
     font-size:1.0em;
 	line-height:1.0em;
 	font-weight:normal;
-	background-color:white;}
+	background-color:#white}
 table {
     font-family: Arial, Helvetica, sans-serif;
     border-collapse: collapse;
+    background-color:#fcfcfc;
     width: 100%;}
 td, th {
     border: 1px solid #ddd;
     white-space: nowrap;
     padding: 5px;}
+tr:nth-child(even) {
+    background-color: #d1d1d1}
 tr:hover {
-    background-color: #ddd;}
+    background-color: #3db5e6;}    
 th {
     padding-top: 12px;
     padding-bottom: 12px;
     text-align: left;
-    background-color: #253746;
+    background-color: #185a7d;
     color: white;
   }
 .logentry {
@@ -145,7 +148,7 @@ Function Make-HTMLTable {
     [void]$html.Append('<thead>')
     [void]$html.Append('<tr>')
     $Headers | Foreach-Object {[void]$Html.AppendFormat('<th>{0}</th>',$_)}
-    [void]$html.Append('<tr>').AppendLine()
+    [void]$html.Append('</tr>').AppendLine()
     [void]$html.AppendLine('</thead>')
     [void]$html.AppendLine('<tbody>')
 
@@ -162,7 +165,7 @@ Function Make-HTMLTable {
                 [void]$html.AppendFormat('<td>{0}</td>',$cell)
             }
         }
-        [void]$html.AppendLine('<tr>') 
+        [void]$html.AppendLine('</tr>') 
     }
     [void]$html.AppendLine('</tbody>')
     [void]$html.AppendLine('</table>')
