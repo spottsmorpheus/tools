@@ -360,7 +360,7 @@ function Get-MorpheusLogs {
     )
 
     Write-Host "Start $($Start.ToString("s"))  - End $($End.ToString("s"))"
-    $Response = Invoke-MorpheusApi -Endpoint "/api/health/logs?startDate=$($Start.ToString("s"))&endDate=$($End.ToString("s"))" -SkipCert
+    $Response = Invoke-MorpheusApi -Endpoint "/api/health/logs?startDate=$($Start.ToString("s"))&endDate=$($End.ToString("s"))" 
     $Log = $Response.logs 
     return $Log
 }
@@ -377,8 +377,10 @@ function get-ProvisionEventLogs {
     $provisionLogs = foreach ($event in $provisionEvents) {
         foreach ($childEvent in $event.events) {
             Write-Host "Grabbing Logs for Event $($event) - $($childEvent)" -ForegroundColor Green
-            Get-MorpheusLogs -Start $childEvent.startDate -End $childEvent.endDate | Sort-Object -prop seq | 
-            Select-Object -Property @{Name="Event";Expression={$event.processType.name}}, @{Name="childEvent";Expression={$childEvent.processType.name}},hostname,seq,@{Name="TimeStampUTC";Expression={$_.ts}},level,message
+            if ($childEvent.startDate -AND $childEvent.endDate) {
+                Get-MorpheusLogs -Start $childEvent.startDate -End $childEvent.endDate | Sort-Object -prop seq | 
+                    Select-Object -Property @{Name="Event";Expression={$event.processType.name}}, @{Name="childEvent";Expression={$childEvent.processType.name}},hostname,seq,@{Name="TimeStampUTC";Expression={$_.ts}},level,message
+            }
         } 
     }
     if ($AsJson) {
