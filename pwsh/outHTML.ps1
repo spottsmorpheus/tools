@@ -158,11 +158,19 @@ Function Make-HTMLTable {
         [void]$html.Append('<tr>')
         foreach ($property in  $item.PSObject.Properties) {
             $class = if ($ClassMap.contains($property.name)) {$ClassMap.item($property.name)} else {$null}
-            $cell = [System.Web.HttpUtility]::HtmlEncode($property.value)
-            if ($class) {
-                [void]$html.AppendFormat('<td class="{1}">{0}</td>',$cell,$class)
+            if ($property.value) {
+                $cell = [System.Web.HttpUtility]::HtmlEncode($property.value)
+                if ($class) {
+                    [void]$html.AppendFormat('<td class="{1}">{0}</td>',$cell,$class)
+                } else {
+                    [void]$html.AppendFormat('<td>{0}</td>',$cell)
+                }
             } else {
-                [void]$html.AppendFormat('<td>{0}</td>',$cell)
+                if ($class) {
+                    [void]$html.AppendFormat('<td class="{1}"></td>',$cell,$class)
+                } else {
+                    [void]$html.AppendFormat('<td></td>',$cell)
+                }
             }
         }
         [void]$html.AppendLine('</tr>') 
