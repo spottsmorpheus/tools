@@ -389,3 +389,25 @@ function get-ProvisionEventLogs {
         return $provisionLogs
     }
 }
+
+Function Show-RoleFeaturePermissions {
+    [CmdletBinding()]
+
+    $Roles = Invoke-MorpheusApi -Endpoint "/api/roles"
+    $UserRoles = $Roles.roles | Where-Object {$_.scope -eq "Account" -And $_.roleType -eq "user"} 
+    $RoleData = $UserRoles | ForEach-Object {Invoke-MorpheusApi -Endpoint "/api/roles/$($_.id)"}
+    $features = foreach ($role in $RoleData) {
+        $Role.featurePermissions | Select-Object -Property @{n="authority";e={$Role.role.authority}},code,name,access
+        #$Role.InstanceTypePermissions | Select-Object -Property @{n="authority";e={$Role.role.authority}},code,name,access
+    }
+
+    $FeaturePermissionsMatrix=[System.Collections.Generic.List[PSCustomObject]]::new()
+    $FeaturePermissions = $features | Group-Object -Property code
+    foreach ($f in $FeaturePermissions) {
+        $permission = [PSCustomObject]@{feature=$f.name}
+        $f.Group | ForEach-Object {Add-Member -InputObject $permission -MemberType NoteProperty -Name $_.authority -Value $_.access}
+        $FeaturePermissionsMatrix.Add($Permission)
+    }
+    $FeaturePermissionsMatrix
+
+}
