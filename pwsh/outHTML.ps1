@@ -83,7 +83,8 @@ Function Out-HtmlPage {
         [String]$Title,
         [String]$Style=$Script:HtmlStyle,
         [Hashtable]$ClassMap=$Script:ClassMap,
-        [Object]$Footer="MorpheusData.com"
+        [Object]$Footer="MorpheusData.com Out-HTMLPage",
+        [String]$Path=$null
     )
 
     Begin {
@@ -114,8 +115,15 @@ Function Out-HtmlPage {
         [void]$html.AppendLine('</body>')
         [void]$html.AppendLine('</html>')
         #Generate the HTML Report
-        $html.ToString() | Set-Content -Path "/tmp/myfile.html"
-        invoke-item "/tmp/myfile.html"
+        if (-Not $Path) {
+            if ([Environment]::OSVersion.Platform -eq [PlatformId]::Unix) {
+                $Path = Join-Path -Path ([Environment]::GetEnvironmentVariable("HOME")) -ChildPath "outhtmlpage.html"
+            } else {
+                $Path = Join-Path -Path ([Environment]::GetEnvironmentVariable("TEMP")) -ChildPath "outhtmlpage.html"
+            }
+        }
+        $html.ToString() | Set-Content -Path $Path
+        invoke-item $Path
     }
 }
 
