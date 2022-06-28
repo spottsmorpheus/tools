@@ -355,14 +355,40 @@ function Get-ProvisionEvents {
 
 function Get-MorpheusLogs {
     param (
-        [DateTime]$Start=[DateTime]::Now.toUniversalTime().AddHours(-1),
-        [DateTime]$End=[DateTime]::Now.toUniversalTime()
+        [Object]$Start=$null,
+        [Object]$End=$null
     )
 
-    Write-Host "Start $($Start.ToString("s"))  - End $($End.ToString("s"))"
-    $Response = Invoke-MorpheusApi -Endpoint "/api/health/logs?startDate=$($Start.ToString("s"))&endDate=$($End.ToString("s"))" 
-    $Log = $Response.logs 
-    return $Log
+    if ($Start -And $End) {
+        try {
+            if ($Start.GetType().name -eq "DateTime") {
+                $Start = $Start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            } else {
+                $Start = [datetime]::parse($Start).toUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        } Catch {
+            Write-Error "Incorrect Time Format $Start"
+            return
+        }
+        try {
+            if ($End.GetType().name -eq "DateTime") {
+                $End = $End.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            } else {
+                $End = [datetime]::parse($End).toUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        } Catch {
+            Write-Error "Incorrect Time Format $End"
+            return
+        }       
+        Write-Host "Filtering Health Logs: Start $($Start)  - End $($End)"
+        $Response = Invoke-MorpheusApi -Endpoint "/api/health/logs?startDate=$($Start)&endDate=$($End)" 
+        $Log = $Response.logs 
+        return $Log
+    } else {
+        $Response = Invoke-MorpheusApi -Endpoint "/api/health/logs" -PageSize 1000
+        $Log = $Response.logs 
+        return $Log     
+    }
 }
 
 function get-ProvisionEventLogs {
