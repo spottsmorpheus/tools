@@ -155,7 +155,7 @@ function Get-MorpheusApiToken {
     Get-MorpheusApiToken -Appliance <MorpheusApplianceURL> -Credential <PSCredentialObject>
 
     .PARAMETER Appliance
-    Appliance Name - Defaults to the Script level variable set by Set-Appliance
+    Appliance Name - Defaults to the Script level variable set by Set-MorpheusAppliance
 
     .PARAMETER Credential
     PSCredential Object - if missing Credentials will be prompted for
@@ -204,7 +204,8 @@ function Invoke-MorpheusApi {
     Invokes the Morpheus API call 
 
     .DESCRIPTION
-    Invokes a Morpheus API call for the supplied EndPoint parameter. 
+    Invokes a Morpheus API call for the supplied EndPoint parameter. API calls are paged so
+    all the data is returned. The PageSize can be set as a parameter
 
     Examples:
     Invoke-MoprheusApi -EndPoint "/api/whoami"
@@ -222,16 +223,16 @@ function Invoke-MorpheusApi {
     Method - Defaults to GET
 
     .PARAMETER PageSize
-    If the API enpoint supports paging, this parameter sets the size (max API parameter). Defaults to 25
+    If the API enpoint supports paging, this parameter sets the size (max API parameter). Defaults to 50
 
     .PARAMETER Body
     If required the Body to be sent as payload
 
-    .PARAMETER SkipCert
-    Defaults to the Script level variable set by Set-MorpheusSkipCert. True or False if Certificate checking is ignored
+    .PARAMETER AsJson
+    Switch to Accept json Body and Return json Payload
 
     .OUTPUTS
-    [PSCustomObject] API response
+    [PSCustomObject] API response or [String] json if -AsJson parameter specified
 
     #>      
     [CmdletBinding()]
@@ -240,8 +241,9 @@ function Invoke-MorpheusApi {
         [string]$Method="Get",
         [string]$Appliance=$script:Appliance,
         [string]$Token=$script:Token,
-        [int]$PageSize=25,
-        [PSCustomObject]$Body=$null
+        [int]$PageSize=50,
+        [Object]$Body=$null,
+        [Switch]$AsJson
     )
 
     Write-Host "Using Appliance $($Appliance) :SkipCert $($Script:SkipCert)" -ForegroundColor Green
@@ -252,8 +254,15 @@ function Invoke-MorpheusApi {
     if ($Body -Or $Method -ne "Get" ) {
         Write-Host "Method $Method : Endpoint $EndPoint" -ForegroundColor Green
         try {
-            # Body Object detected - convert to json payload for the Api (5 levels max)
-            $Payload = $Body | Convertto-json -depth 5
+            if ($AsJson) {
+                # Body is already Specified as Json
+                $Payload = $Body
+            } else {
+                # Body Object - convert to json payload for the Api (5 levels max)
+                $Payload = $Body | Convertto-json -depth 5                
+            }
+            Write-Host "Payload Body:" -ForegroundColor Green
+            Write-Host $Payload -ForegroundColor Cyan
             if ($script:SkipCertSupported) {
                 $Response=Invoke-WebRequest -Method $Method -Uri "$($Appliance)$($Endpoint)" -Body $Payload -Headers $Headers -SkipCertificateCheck:$script:SkipCert -ErrorAction SilentlyContinue
             } else {
@@ -261,7 +270,11 @@ function Invoke-MorpheusApi {
             }
             if ($Response.StatusCode -eq 200) {
                 Write-Host "Success:" -ForegroundColor Green
-                $Payload = $Response.Content | Convertfrom-Json
+                if ($AsJson) {
+                    $Payload = $Response.Content
+                } else {
+                    $Payload = $Response.Content | Convertfrom-Json
+                }
                 return $Payload
             } else {
                 Write-Warning "API returned status code $($Response.StatusCode)"
@@ -330,16 +343,21 @@ function Invoke-MorpheusApi {
                 $More = $False
             }
         } While ($More)
+    }
+    if ($AsJson) {
+        return $Data | Convertto-Json -Depth 5
+    } else {
+        return $Data
     }    
-    return $Data
 }
 
 
-function Get-ProvisionEvents {
+function Get-MorpheusEvents {
     param (
         [int32]$InstanceId=0,
         [int32]$ServerId=0,
-        [string]$ProcessType="provision"
+        [ValidateSet("task","workflow","provision","all")]
+        [string]$ProcessType="all"
     )
 
     if ($InstanceId -ne 0) {
@@ -349,8 +367,13 @@ function Get-ProvisionEvents {
     } else {
         $proc=Invoke-MorpheusApi -Endpoint "/api/processes?refType=container" 
     }
-    # Filter By ProcessType
-    return $proc.processes| Where-Object {$_.processType.code -eq $ProcessType}
+    
+    # Filter By ProcessType if required
+    if ($ProcessType -eq "all") {
+        return $proc.processes
+    } else {
+        return $proc.processes| Where-Object {$_.processType.name -eq $ProcessType}
+    }
 }
 
 function Get-MorpheusLogs {
@@ -391,28 +414,60 @@ function Get-MorpheusLogs {
     }
 }
 
-function get-ProvisionEventLogs {
+function Get-MorpheusEventLogs {
     param (
         [int32]$InstanceId=0,
         [int32]$ServerId=0,
+        [ValidateSet("task","workflow","provision","all")]
+        [string]$ProcessType="provision",
         [switch]$AsJson
     ) 
 
-    $provisionEvents =  Get-ProvisionEvents -InstanceId $InstanceId -ServerId $ServerId
-    
-    $provisionLogs = foreach ($event in $provisionEvents) {
-        foreach ($childEvent in $event.events) {
-            Write-Host "Grabbing Logs for Event $($event) - $($childEvent)" -ForegroundColor Green
-            if ($childEvent.startDate -AND $childEvent.endDate) {
-                Get-MorpheusLogs -Start $childEvent.startDate -End $childEvent.endDate | Sort-Object -prop seq | 
-                    Select-Object -Property @{Name="Event";Expression={$event.processType.name}}, @{Name="childEvent";Expression={$childEvent.processType.name}},hostname,seq,@{Name="TimeStampUTC";Expression={$_.ts}},level,message
+    $provisionEvents =  Get-MorpheusEvents -InstanceId $InstanceId -ServerId $ServerId -ProcessType $ProcessType
+
+    $eventLogs= [System.Collections.Generic.List[Object]]::new()
+    foreach ($process in $provisionEvents) {
+        foreach ($event in $process.events) {
+            if ($event.startDate -AND $event.endDate) {
+                Write-Host "Grabbing Logs for Event $($event.displayName) - $($event.processType.name)" -ForegroundColor Green
+                $logs = Get-MorpheusLogs -Start $event.startDate -End $event.endDate | Sort-Object -prop seq
+                if ($logs.count -gt 0) {
+                    foreach ($log in $logs) {
+                        $logEvent = [PSCustomObject]@{
+                            name=$event.displayName;
+                            process=$process.processType.name;
+                            eventType=$event.processType.name;
+                            #eventStart=$event.startDate;
+                            #eventEnd=$event.endDate;
+                            logTime=$log.ts;
+                            level=$log.level;
+                            seqNo=$log.seq;
+                            message=$log.message
+                        }
+                        $eventLogs.Add($logEvent)
+                    }
+                } else {
+                    $logEvent = [PSCustomObject]@{
+                        name=$event.displayName;
+                        process=$process.processType.name;
+                        eventType=$event.processType.name;
+                        #eventStart=$event.startDate;
+                        #eventEnd=$event.endDate;
+                        logTime="";
+                        level="";
+                        seqNo="";
+                        message="No Logs for this TimeSpan"
+                    }
+                    $eventLogs.Add($logEvent)
+                }
             }
-        } 
+        }      
     }
+
     if ($AsJson) {
-        return $provisionLogs | ConvertTo-Json -Depth 5
+        return $eventLogs.ToArray() | ConvertTo-Json -Depth 5
     } else {
-        return $provisionLogs
+        return $eventLogs.ToArray()
     }
 }
 
