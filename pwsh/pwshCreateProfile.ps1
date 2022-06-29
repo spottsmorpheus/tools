@@ -29,6 +29,10 @@ Invokefrom-GitHub -ScriptUrl "https://raw.githubusercontent.com/spottsmorpheus/t
 Invokefrom-GitHub -ScriptUrl "https://raw.githubusercontent.com/spottsmorpheus/tools/main/pwsh/outHTML.ps1" -Name "Out-HTML"
 
 # You may add your own code here
+# Set-MorpheusAppliance "Your Url"
+# Set-MorpheusToten "YourToken"
+# if you use self-signed certificates
+# Set-MorpheusSkipCert 
 
 '@
 

@@ -51,6 +51,7 @@ footer {
 #>
 $ClassMap = @{}
 $ClassMap.Add("message","logentry")
+$ClassMap.Add("output","logentry")
 
 function test-pipe {
     Param (
