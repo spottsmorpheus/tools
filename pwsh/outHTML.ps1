@@ -53,6 +53,9 @@ $ClassMap = @{}
 $ClassMap.Add("message","logentry")
 $ClassMap.Add("output","logentry")
 
+# HttpUtility
+Add-Type -AssemblyName System.Web
+
 function test-pipe {
     Param (
         [Parameter(Mandatory,ValueFromPipeline = $true)]
