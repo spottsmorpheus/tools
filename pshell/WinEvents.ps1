@@ -6,7 +6,8 @@ function Get-WindowsAuditEvents {
         [String]$IPAddress,
         [String]$TargetUser,
         [Switch]$AsXML,
-        [Switch]$AsSummary
+        [Switch]$AsSummary,
+        [Switch]$AsJson
     )
 
     # Setup the xPath Query for fast filtering of EventLog
@@ -45,19 +46,25 @@ function Get-WindowsAuditEvents {
             $XMLEvents = $Events | Foreach-Object { XmlPrettyPrint -Xml $_.toXML() }
             return $XMLEvents
         }
-        elseif ($AsSummary) {           
+        elseif ($AsSummary -Or $AsJson) {           
             $Summary = foreach ($Event in $Events) {
                 $EventData = Get-EventdataProperties -Event $Event
                 [PSCustomObject]@{
-                    TimeCreated      = $Event.TimeCreated;
-                    Id               = $event.Id;
+                    RecordId         = $Event.RecordId;
+                    TimeCreated      = $Event.TimeCreated.ToString("s");
+                    Id               = $Event.Id;
+                    MachineName      = $Event.MachineName;
                     TargetUserName   = $EventData.TargetUserName;
                     TargetDomainName = $EventData.TargetDomainName;
                     IpAddress        = $EventData.IpAddress;
                     IpPort           = $EventData.IpPort
                 }
             }
-            return $Summary
+            if ($AsJson) {
+                return $Summary | ConvertTo-Json -Depth 3
+            } else {
+                return $Summary
+            }
         }
         else {
             return $Events
