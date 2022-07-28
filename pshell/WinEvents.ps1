@@ -1,4 +1,30 @@
 # Look specifically for Windows Security Events connected with Morpheus
+
+$FailCodes = @{
+    "0XC000005E"="There are currently no logon servers available to service the logon request.";
+    "0xC0000064"="Misspelled or bad username";
+    "0xC000006A"="Misspelled or bad password";
+    "0XC000006D"="Bad username or authentication information";
+    "0XC000006E"="Credentials OK but account restrictions prevent login";
+    "0xC000006F"="User logon outside authorized hours";
+    "0xC0000070"="User logon from unauthorized workstation";
+    "0xC0000071"="User logon with expired password";
+    "0xC0000072"="User Account disabled by administrator";
+    "0XC00000DC"="Sam Server was in the wrong state to perform the desired operation.";
+    "0XC0000133"="Clocks between DC and other computer too far out of sync";
+    "0XC000015B"="The user has not been granted the requested logon type at this machine";
+    "0XC000018C"="The logon request failed because the trust relationship between the primary domain and the trusted domain failed.";
+    "0XC0000192"="An attempt was made to logon, but the Netlogon service was not started.";
+    "0xC0000193"="User logon attempt with expired account.";
+    "0XC0000224"="User is required to change password at next logon";
+    "0XC0000225"="Evidently a bug in Windows and not a risk";
+    "0xC0000234"="User logon attemot with account locked";
+    "0XC00002EE"="Failure Reason: An Error occurred during Logon";
+    "0XC0000413"="Logon Failure: The machine you are logging on to is protected by an authentication firewall. The specified account is not allowed to authenticate to the machine.";
+    "0x0"="Status OK"
+}
+
+
 function Get-WindowsAuditEvents {
     param (
         [int32]$RecentMinutes = 10,
@@ -50,6 +76,7 @@ function Get-WindowsAuditEvents {
             $Summary = foreach ($Event in $Events) {
                 $EventData = Get-EventdataProperties -Event $Event
                 [PSCustomObject]@{
+                    Audit            = if ($Event.Id -eq 4624) {"Success"} else {"Fail"};
                     RecordId         = $Event.RecordId;
                     TimeCreated      = $Event.TimeCreated.ToString("s");
                     Id               = $Event.Id;
@@ -57,7 +84,9 @@ function Get-WindowsAuditEvents {
                     TargetUserName   = $EventData.TargetUserName;
                     TargetDomainName = $EventData.TargetDomainName;
                     IpAddress        = $EventData.IpAddress;
-                    IpPort           = $EventData.IpPort
+                    IpPort           = $EventData.IpPort;
+                    Status           = if ($Event.Id -eq 4625) {$Script:FailCodes.Item($EventData.Status)} else {"-"}
+                    SubStatus        = if ($Event.Id -eq 4625) {$Script:FailCodes.Item($EventData.SubStatus)} else {"-"}
                 }
             }
             if ($AsJson) {
